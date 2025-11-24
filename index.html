@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>球球大作战 - 终极修复版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f0f1a;
+            font-family: 'Nunito', sans-serif;
+            touch-action: none;
+            user-select: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        /* 通用 UI 层 */
+        .fullscreen-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: all 0.4s ease;
+            background: radial-gradient(circle at center, rgba(30,30,50,0.95) 0%, rgba(10,10,20,0.99) 100%);
+            backdrop-filter: blur(15px);
+        }
+
+        .hidden { opacity: 0; pointer-events: none; transform: scale(0.95); }
+        .visible { opacity: 1; pointer-events: auto; transform: scale(1); }
+
+        /* 游戏 UI 容器 (修复：全屏定位) */
+        #gameUI {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 让点击穿透到 Canvas */
+            z-index: 50;
+            transition: all 0.3s ease;
+        }
+
+        /* 标题与文字 */
+        .game-title {
+            font-family: 'Fredoka One', cursive;
+            font-size: 72px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #FF00CC 0%, #3333FF 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 4px 15px rgba(51, 51, 255, 0.4));
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* 按钮样式 */
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border-radius: 12px;
+            border: none;
+            font-size: 18px;
+            font-weight: 800;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-family: 'Nunito', sans-serif;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #ff416c, #ff4b2b);
+            box-shadow: 0 4px 15px rgba(255, 75, 43, 0.4);
+            min-width: 180px;
+        }
+        .btn-primary:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 8px 25px rgba(255, 75, 43, 0.6); }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            min-width: 150px;
+        }
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.2); }
+
+        input {
+            padding: 18px;
+            width: 300px;
+            border-radius: 12px;
+            border: 2px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: white;
+            font-size: 18px;
+            text-align: center;
+            outline: none;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+        input:focus { 
+            border-color: #3333FF; 
+            box-shadow: 0 0 20px rgba(51, 51, 255, 0.2); 
+            background: rgba(255,255,255,0.1);
+        }
+
+        /* 皮肤预览 */
+        #skinPreview {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #skinPreview:hover { transform: scale(1.1); }
+        
+        .skin-name {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* HUD & 游戏内 UI */
+        .hud-top-right {
+            position: absolute; 
+            top: 20px; 
+            right: 20px;
+            color: white; 
+            background: rgba(0,0,0,0.4); 
+            padding: 15px;
+            border-radius: 12px; 
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none;
+            z-index: 60;
+        }
+        
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            width: 180px;
+            font-size: 14px;
+            margin-bottom: 4px;
+            font-weight: 700;
+        }
+
+        .hud-bottom-left {
+            position: absolute; 
+            bottom: 25px; 
+            left: 25px;
+            color: white; 
+            background: rgba(0,0,0,0.5); 
+            padding: 10px 25px;
+            border-radius: 30px; 
+            backdrop-filter: blur(4px);
+            font-family: 'Fredoka One', cursive; 
+            font-size: 28px;
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none;
+            z-index: 60;
+        }
+
+        #minimap-container {
+            position: absolute; 
+            bottom: 25px; 
+            right: 25px;
+            width: 160px; 
+            height: 160px; 
+            background: rgba(15,15,25,0.6);
+            border-radius: 50%; 
+            border: 3px solid rgba(255,255,255,0.15);
+            overflow: hidden; 
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+            z-index: 60;
+        }
+
+        /* 游戏结束卡片 */
+        .game-over-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 40px; 
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1); 
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            max-width: 450px; 
+            width: 90%;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+        
+        .stats-grid {
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 15px; 
+            margin: 30px 0;
+        }
+        .stat-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; }
+        .stat-label { font-size: 12px; color: #888; margin-bottom: 5px; }
+        .stat-value { font-size: 20px; font-weight: bold; color: #fff; font-family: 'Fredoka One'; }
+
+        /* 移动端控制 */
+        #mobile-controls {
+            display: none; 
+            position: absolute; 
+            bottom: 40px; 
+            right: 200px; 
+            gap: 20px; 
+            z-index: 70;
+            pointer-events: auto;
+        }
+        .control-btn {
+            width: 75px; 
+            height: 75px; 
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1); 
+            border: 2px solid rgba(255,255,255,0.3);
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            color: white; 
+            font-weight: bold;
+            backdrop-filter: blur(4px);
+        }
+        .control-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.95); }
+    </style>
+</head>
+<body>
+
+    <!-- 游戏画布 -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 开始界面 -->
+    <div id="startScreen" class="fullscreen-ui visible">
+        <h1 class="game-title">球球大作战</h1>
+        
+        <!-- 皮肤预览 -->
+        <canvas id="skinPreview" width="100" height="100"></canvas>
+        <div class="skin-name" id="skinNameDisplay">当前皮肤: 经典</div>
+
+        <input type="text" id="nickname" placeholder="输入你的昵称" maxlength="10" value="Guest">
+        
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="changeSkin()">🎲 换个皮肤</button>
+            <button class="btn btn-primary" onclick="startGame()">开始吞噬</button>
+        </div>
+        <p class="text-gray-500 mt-6 text-sm">操作：鼠标移动 | 空格分裂 | 左键/W 吐球</p>
+    </div>
+
+    <!-- 结算界面 -->
+    <div id="gameOverScreen" class="fullscreen-ui hidden">
+        <div class="game-over-card">
+            <h2 class="text-5xl font-black text-white mb-2" style="font-family: 'Fredoka One'">GAME OVER</h2>
+            <p id="killerDisplay" class="text-red-400 text-lg mb-4">被 [XXX] 吞噬</p>
+            
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-label">最终质量</div>
+                    <div class="stat-value" id="finalMass">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">存活时间</div>
+                    <div class="stat-value" id="survivalTime">0s</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">击杀数</div>
+                    <div class="stat-value" id="killCount">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">最高排名</div>
+                    <div class="stat-value" id="bestRank">-</div>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <button class="btn btn-primary w-full" onclick="restartGame()">再次挑战</button>
+                <button class="btn btn-secondary w-full" onclick="changeSkin(true)">🎨 更换外观</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 游戏 UI HUD (增加 Wrapper 确保 transform 不影响定位) -->
+    <div id="gameUI" class="hidden">
+        <div class="hud-top-right">
+            <h3 class="text-xs text-gray-400 mb-2 border-b border-gray-600 pb-1 tracking-widest">排行榜</h3>
+            <div id="leaderboard"></div>
+        </div>
+        <div class="hud-bottom-left">Mass: <span id="scoreDisplay">0</span></div>
+        <div id="minimap-container"><canvas id="minimap"></canvas></div>
+        <div id="mobile-controls">
+            <div class="control-btn" id="btn-split">分裂</div>
+            <div class="control-btn" id="btn-eject">吐球</div>
+        </div>
+    </div>
+
+<script>
+/**
+ * 皮肤渲染系统 (Canvas API)
+ */
+const SkinSystem = {
+    types: [
+        'classic', 'rainbow', 'magma', 'watermelon', 'target', 
+        'polkadot', 'deepsea', 'bumblebee', 'glitch', 'earth'
+    ],
+    names: {
+        'classic': '经典纯色', 'rainbow': '彩虹糖', 'magma': '地狱熔岩', 
+        'watermelon': '大西瓜', 'target': '绝对靶心', 'polkadot': '波点派对', 
+        'deepsea': '深海气泡', 'bumblebee': '大黄蜂', 'glitch': '赛博故障', 'earth': '地球母亲'
+    },
+    
+    render(type, ctx, radius, color, time = 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.clip(); // 限制绘制区域
+
+        // 辅助：填充全区域
+        const fillArea = () => ctx.fillRect(-radius, -radius, radius*2, radius*2);
+
+        switch(type) {
+            case 'rainbow':
+                ctx.rotate(time / 500);
+                const grad = ctx.createLinearGradient(-radius, -radius, radius, radius);
+                for(let i=0; i<=6; i++) grad.addColorStop(i/6, `hsl(${i*60}, 100%, 50%)`);
+                ctx.fillStyle = grad;
+                fillArea();
+                break;
+
+            case 'magma':
+                ctx.fillStyle = '#330000'; fillArea();
+                ctx.strokeStyle = '#FF4500'; ctx.lineWidth = radius * 0.15; ctx.lineCap = 'round';
+                for(let i=0; i<5; i++) {
+                    ctx.beginPath(); ctx.moveTo(-radius + Math.random()*radius*2, -radius);
+                    ctx.lineTo(Math.random()*radius, radius); ctx.stroke();
+                }
+                ctx.strokeStyle = '#FFD700'; ctx.lineWidth = radius * 0.05; ctx.stroke();
+                break;
+
+            case 'watermelon':
+                ctx.fillStyle = '#90EE90'; fillArea();
+                ctx.fillStyle = '#006400'; 
+                for(let i=-1; i<2; i++) {
+                    ctx.beginPath(); ctx.ellipse(i * radius * 0.6, 0, radius * 0.2, radius, 0, 0, Math.PI * 2); ctx.fill();
+                }
+                break;
+
+            case 'target':
+                const colors = ['#FF0000', '#FFFFFF'];
+                for(let i=5; i>0; i--) {
+                    ctx.fillStyle = colors[i % 2];
+                    ctx.beginPath(); ctx.arc(0, 0, radius * (i/5), 0, Math.PI * 2); ctx.fill();
+                }
+                break;
+
+            case 'polkadot':
+                ctx.fillStyle = color; fillArea();
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                const dotSize = radius * 0.3;
+                for(let x=-radius; x<radius; x+=dotSize*1.5) {
+                    for(let y=-radius; y<radius; y+=dotSize*1.5) {
+                        ctx.beginPath(); ctx.arc(x, y, dotSize * 0.3, 0, Math.PI * 2); ctx.fill();
+                    }
+                }
+                break;
+
+            case 'bumblebee':
+                ctx.fillStyle = '#FFD700'; fillArea();
+                ctx.fillStyle = '#000';
+                const stripeH = radius * 0.4;
+                ctx.fillRect(-radius, -radius * 0.5, radius * 2, stripeH);
+                ctx.fillRect(-radius, radius * 0.3, radius * 2, stripeH);
+                break;
+
+            case 'deepsea':
+                const seaGrad = ctx.createRadialGradient(0, -radius*0.5, 0, 0, 0, radius);
+                seaGrad.addColorStop(0, '#00BFFF'); seaGrad.addColorStop(1, '#00008B');
+                ctx.fillStyle = seaGrad; fillArea();
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                for(let i=0; i<5; i++) {
+                    ctx.beginPath(); 
+                    ctx.arc(Math.sin(time/200 + i)*radius*0.5, Math.cos(time/300 + i)*radius*0.5, radius*0.15, 0, Math.PI*2); 
+                    ctx.fill();
+                }
+                break;
+            
+            case 'glitch':
+                ctx.fillStyle = '#111'; fillArea();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.fillStyle = '#F0F'; ctx.fillRect(Math.random()*radius - radius/2, -radius, radius/2, radius*2);
+                ctx.fillStyle = '#0FF'; ctx.fillRect(-radius, Math.random()*radius - radius/2, radius*2, radius/4);
+                break;
+
+            case 'earth':
+                ctx.fillStyle = '#1E90FF'; fillArea();
+                ctx.fillStyle = '#32CD32';
+                ctx.beginPath(); ctx.moveTo(-radius*0.6, -radius*0.6);
+                ctx.quadraticCurveTo(0, -radius*0.2, radius*0.7, -radius*0.5);
+                ctx.lineTo(radius*0.5, radius*0.2);
+                ctx.quadraticCurveTo(0, radius*0.8, -radius*0.5, radius*0.3);
+                ctx.fill();
+                break;
+
+            case 'classic':
+            default:
+                ctx.fillStyle = color; fillArea();
+                const shine = ctx.createRadialGradient(-radius*0.3, -radius*0.3, radius*0.1, 0, 0, radius);
+                shine.addColorStop(0, 'rgba(255,255,255,0.4)'); shine.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = shine; fillArea();
+                break;
+        }
+
+        // 立体感内阴影
+        const innerShadow = ctx.createRadialGradient(0, 0, radius*0.8, 0, 0, radius);
+        innerShadow.addColorStop(0, 'rgba(0,0,0,0)');
+        innerShadow.addColorStop(1, 'rgba(0,0,0,0.3)');
+        ctx.fillStyle = innerShadow;
+        fillArea();
+
+        ctx.restore();
+    }
+};
+
+/**
+ * 游戏配置与工具
+ */
+const CONFIG = {
+    mapSize: 4000,
+    foodCount: 1000,
+    virusCount: 45,
+    botCount: 30,
+    playerStartMass: 20,
+    colors: ['#FF3366', '#33CCFF', '#99FF33', '#FFCC00', '#CC33FF', '#00FFCC', '#FF6600', '#3366FF']
+};
+
+const Utils = {
+    rand: (min, max) => Math.random() * (max - min) + min,
+    randColor: () => CONFIG.colors[Math.floor(Math.random() * CONFIG.colors.length)],
+    getDist: (x1, y1, x2, y2) => Math.sqrt((x2-x1)**2 + (y2-y1)**2),
+    massToRadius: (mass) => Math.sqrt(mass * 10),
+    nameList: ["大魔王", "这波不亏", "求合作", "带妹", "无敌", "小可爱", "Guest", "Pro", "Noob", "Winner", "King"]
+};
+
+let currentSkin = 'classic';
+
+/**
+ * 游戏核心逻辑
+ */
+const Game = {
+    canvas: document.getElementById('gameCanvas'),
+    ctx: document.getElementById('gameCanvas').getContext('2d'),
+    minimapCtx: document.getElementById('minimap').getContext('2d'),
+    
+    width: window.innerWidth,
+    height: window.innerHeight,
+    
+    isRunning: false,
+    camera: { x: 0, y: 0, scale: 1 },
+    
+    entities: { foods: [], viruses: [], ejected: [], players: [] },
+    myId: null,
+    mouse: { x: 0, y: 0 },
+    stats: { start: 0, maxMass: 0, kills: 0, rank: 99 },
+
+    init() {
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        
+        window.addEventListener('mousemove', e => {
+            this.mouse.x = e.clientX - this.width / 2;
+            this.mouse.y = e.clientY - this.height / 2;
+        });
+        
+        window.addEventListener('mousedown', e => {
+            if(this.isRunning && e.button === 0) this.eject();
+        });
+        
+        window.addEventListener('keydown', e => {
+            if(!this.isRunning) return;
+            if(e.code === 'Space' && !e.repeat) this.split();
+            if(e.code === 'KeyW') this.eject();
+        });
+        
+        if('ontouchstart' in window) {
+            document.getElementById('mobile-controls').style.display = 'flex';
+            document.getElementById('btn-split').addEventListener('touchstart', (e) => { e.preventDefault(); this.split(); });
+            document.getElementById('btn-eject').addEventListener('touchstart', (e) => { e.preventDefault(); this.eject(); });
+            window.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                this.mouse.x = e.touches[0].clientX - this.width / 2;
+                this.mouse.y = e.touches[0].clientY - this.height / 2;
+            }, { passive: false });
+        }
+        
+        changeSkin(false);
+        this.loop();
+    },
+
+    resize() {
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        document.getElementById('minimap').width = 160;
+        document.getElementById('minimap').height = 160;
+    },
+
+    start(name) {
+        document.getElementById('startScreen').classList.replace('visible', 'hidden');
+        document.getElementById('gameOverScreen').classList.replace('visible', 'hidden');
+        document.getElementById('gameUI').classList.replace('hidden', 'visible');
+        
+        this.isRunning = true;
+        this.entities = { foods: [], viruses: [], ejected: [], players: [] };
+        this.stats = { start: Date.now(), maxMass: CONFIG.playerStartMass, kills: 0, rank: 99 };
+        
+        for(let i=0; i<CONFIG.foodCount; i++) this.addFood();
+        for(let i=0; i<CONFIG.virusCount; i++) this.addVirus();
+        
+        const p = new Player(name, false);
+        p.skin = currentSkin;
+        this.entities.players.push(p);
+        this.myId = p.id;
+
+        for(let i=0; i<CONFIG.botCount; i++) {
+            const bot = new Bot();
+            bot.skin = SkinSystem.types[Math.floor(Math.random() * SkinSystem.types.length)];
+            this.entities.players.push(bot);
+        }
+    },
+
+    loop() {
+        if (this.isRunning) {
+            this.update();
+            this.render();
+        } else {
+            this.renderBackground();
+        }
+        requestAnimationFrame(() => this.loop());
+    },
+
+    renderBackground() {
+        const ctx = this.ctx;
+        ctx.fillStyle = '#0f0f1a';
+        ctx.fillRect(0, 0, this.width, this.height);
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.beginPath();
+        const t = Date.now() / 1000;
+        for(let i=0; i<10; i++) {
+            const y = (t * 50 + i * 100) % this.height;
+            ctx.moveTo(0, y);
+            ctx.lineTo(this.width, y + 100);
+        }
+        ctx.stroke();
+    },
+
+    render() {
+        this.renderBackground();
+        
+        const {ctx, width, height, camera} = this;
+        
+        ctx.save();
+        ctx.translate(width / 2, height / 2);
+        ctx.scale(camera.scale, camera.scale);
+        ctx.translate(-camera.x, -camera.y);
+
+        // 网格 & 边界
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const step = 50;
+        const L = CONFIG.mapSize / 2;
+        for(let x=-L; x<=L; x+=step) { ctx.moveTo(x, -L); ctx.lineTo(x, L); }
+        for(let y=-L; y<=L; y+=step) { ctx.moveTo(-L, y); ctx.lineTo(L, y); }
+        ctx.stroke();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 20;
+        ctx.strokeRect(-L, -L, CONFIG.mapSize, CONFIG.mapSize);
+
+        // 食物
+        const time = Date.now();
+        this.entities.foods.forEach(f => {
+            if(Math.abs(f.x - camera.x) > width/camera.scale) return;
+            ctx.fillStyle = f.color;
+            ctx.beginPath();
+            const r = f.r + (f.pulse ? Math.sin(time/200 + f.x) : 0);
+            ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // 孢子
+        this.entities.ejected.forEach(e => {
+            ctx.fillStyle = e.color;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // 刺球
+        ctx.fillStyle = '#33ff33';
+        ctx.strokeStyle = '#22cc22';
+        ctx.lineWidth = 5;
+        this.entities.viruses.forEach(v => {
+            ctx.beginPath();
+            for(let i=0; i<40; i++) {
+                const a = (Math.PI * i) / 20;
+                const r = (i % 2 === 0) ? v.r : v.r * 0.9;
+                ctx.lineTo(v.x + Math.cos(a) * r, v.y + Math.sin(a) * r);
+            }
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            ctx.fillStyle = 'rgba(100,255,100,0.4)'; ctx.fill();
+        });
+
+        // 玩家
+        const cells = [];
+        this.entities.players.forEach(p => p.cells.forEach(c => cells.push({...c, parent:p})));
+        cells.sort((a, b) => a.mass - b.mass);
+        
+        cells.forEach(c => {
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            const wobble = Math.sin(time / 100 + c.x) * 0.02;
+            ctx.scale(1 + wobble, 1 - wobble);
+            SkinSystem.render(c.parent.skin, ctx, c.r, c.parent.color, time);
+            ctx.restore();
+            
+            if(c.r > 10) {
+                ctx.fillStyle = '#FFF'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2 + c.r / 30;
+                ctx.font = `bold ${Math.max(10, c.r * 0.4)}px Nunito`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.strokeText(c.parent.name, c.x, c.y); ctx.fillText(c.parent.name, c.x, c.y);
+            }
+        });
+
+        ctx.restore();
+        
+        // 小地图
+        const mCtx = this.minimapCtx;
+        mCtx.clearRect(0, 0, 160, 160);
+        const scale = 160 / CONFIG.mapSize;
+        const off = 80; 
+        
+        this.entities.players.forEach(p => {
+            mCtx.fillStyle = p.id === this.myId ? '#FFF' : p.color;
+            mCtx.beginPath();
+            mCtx.arc(p.cx * scale + off, p.cy * scale + off, p.id === this.myId ? 4 : 2, 0, Math.PI * 2);
+            mCtx.fill();
+        });
+    },
+
+    update() {
+        if (this.entities.foods.length < CONFIG.foodCount) this.addFood();
+        
+        this.entities.players.forEach(p => {
+            if (p.cells.length === 0) return;
+            
+            let cx=0, cy=0, mass=0, minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+            p.cells.forEach(c => {
+                cx += c.x; cy += c.y; mass += c.mass;
+                minX = Math.min(minX, c.x-c.r); maxX = Math.max(maxX, c.x+c.r);
+                minY = Math.min(minY, c.y-c.r); maxY = Math.max(maxY, c.y+c.r);
+            });
+            p.cx = cx / p.cells.length; p.cy = cy / p.cells.length; p.mass = mass;
+            p.bounds = { w: maxX - minX, h: maxY - minY };
+
+            if(p.id === this.myId) {
+                this.stats.maxMass = Math.max(this.stats.maxMass, p.mass);
+                document.getElementById('scoreDisplay').innerText = Math.floor(p.mass);
+            }
+
+            if(p.isBot) p.think(this.entities);
+
+            let tx, ty;
+            if(p.id === this.myId) {
+                tx = p.cx + this.mouse.x; ty = p.cy + this.mouse.y;
+            } else {
+                tx = p.cx + p.dir.x * 1000; ty = p.cy + p.dir.y * 1000;
+            }
+
+            p.cells.forEach(c => {
+                const dist = Utils.getDist(c.x, c.y, tx, ty);
+                const speed = 5 * Math.pow(c.mass, -0.1) * 2.5;
+                
+                if(dist > 0) {
+                    c.x += ((tx - c.x) / dist) * speed;
+                    c.y += ((ty - c.y) / dist) * speed;
+                }
+                
+                c.x += c.vx; c.y += c.vy;
+                c.vx *= 0.9; c.vy *= 0.9; 
+
+                p.cells.forEach(o => {
+                    if(c === o) return;
+                    const d = Utils.getDist(c.x, c.y, o.x, o.y);
+                    if(d < c.r + o.r) {
+                        if(!(Date.now() > c.merge && Date.now() > o.merge)) {
+                            const a = Math.atan2(c.y - o.y, c.x - o.x);
+                            const f = (c.r + o.r - d) / 2;
+                            c.x += Math.cos(a) * f * 0.1; c.y += Math.sin(a) * f * 0.1;
+                        }
+                    }
+                });
+
+                const L = CONFIG.mapSize / 2;
+                c.x = Math.max(-L, Math.min(L, c.x)); c.y = Math.max(-L, Math.min(L, c.y));
+            });
+
+            for(let i=0; i<p.cells.length; i++) {
+                for(let j=i+1; j<p.cells.length; j++) {
+                    const c1 = p.cells[i], c2 = p.cells[j];
+                    if(Date.now() > c1.merge && Date.now() > c2.merge && 
+                       Utils.getDist(c1.x, c1.y, c2.x, c2.y) < c1.r + c2.r * 0.5) {
+                        c1.mass += c2.mass; c1.r = Utils.massToRadius(c1.mass);
+                        p.cells.splice(j, 1); j--;
+                    }
+                }
+            }
+        });
+
+        this.entities.ejected.forEach((e,i) => {
+            e.x += e.vx; e.y += e.vy; e.vx *= 0.9; e.vy *= 0.9;
+            if(Math.abs(e.x) > CONFIG.mapSize/2 || Math.abs(e.y) > CONFIG.mapSize/2) {
+                this.entities.ejected.splice(i, 1);
+            }
+        });
+
+        let deaths = [];
+        this.entities.players.forEach(hunter => {
+            hunter.cells.forEach(h => {
+                for(let i=this.entities.foods.length-1; i>=0; i--) {
+                    const f = this.entities.foods[i];
+                    if(Utils.getDist(h.x, h.y, f.x, f.y) < h.r + f.r) {
+                        h.mass += 1; h.r = Utils.massToRadius(h.mass); this.entities.foods.splice(i, 1);
+                    }
+                }
+                for(let i=this.entities.ejected.length-1; i>=0; i--) {
+                    const e = this.entities.ejected[i];
+                    if(Utils.getDist(h.x, h.y, e.x, e.y) < h.r + e.r) {
+                        if(hunter.id !== e.from || Date.now() - e.time > 200) {
+                            h.mass += e.mass; h.r = Utils.massToRadius(h.mass); this.entities.ejected.splice(i, 1);
+                        }
+                    }
+                }
+                for(let i=this.entities.viruses.length-1; i>=0; i--) {
+                    const v = this.entities.viruses[i];
+                    if(h.mass > v.mass * 1.2 && Utils.getDist(h.x, h.y, v.x, v.y) < h.r + v.r) {
+                        this.entities.viruses.splice(i, 1); this.explode(hunter, h); this.addVirus();
+                    }
+                }
+                this.entities.players.forEach(prey => {
+                    if(hunter.id === prey.id) return;
+                    // [吞噬逻辑] 即使是假合作，物理上如果大球覆盖小球圆心，依然会吃掉
+                    // 但由于AI logic中避免了互相追逐，这种情况只会在意外挤压时发生
+                    for(let j=prey.cells.length-1; j>=0; j--) {
+                        const p = prey.cells[j];
+                        if(h.mass > p.mass * 1.25 && Utils.getDist(h.x, h.y, p.x, p.y) < h.r - p.r * 0.6) {
+                            h.mass += p.mass; h.r = Utils.massToRadius(h.mass); prey.cells.splice(j, 1);
+                            if(hunter.id === this.myId) this.stats.kills++;
+                            if(prey.cells.length === 0) deaths.push({vic: prey.id, killer: hunter.name});
+                        }
+                    }
+                });
+            });
+        });
+
+        deaths.forEach(d => {
+            if(d.vic === this.myId) {
+                this.gameOver(d.killer);
+            } else {
+                setTimeout(() => {
+                    if(this.isRunning) {
+                        let bot = new Bot();
+                        bot.skin = SkinSystem.types[Math.floor(Math.random() * SkinSystem.types.length)];
+                        this.entities.players.push(bot); 
+                    }
+                }, 2000);
+            }
+        });
+        
+        this.entities.players = this.entities.players.filter(p => p.cells.length > 0);
+
+        const me = this.entities.players.find(p => p.id === this.myId);
+        if(me) {
+            const rad = Utils.massToRadius(me.mass);
+            const spread = Math.max(me.bounds.w, me.bounds.h);
+            
+            // [OPTIMIZED] 视野逻辑优化
+            // 1.2 -> 1.01: 限制最大放大倍数，确保视野面积至少为屏幕的 98% (1/1.01^2 ≈ 0.98)
+            // 避免了视野太小（Zoom in 太多）导致看不清周围
+            let targetScale = Math.max(0.05, Math.min(1.01, 50 / (rad + 40)));
+            
+            if(spread > rad * 3) targetScale *= 0.7;
+            this.camera.x += (me.cx - this.camera.x) * 0.1;
+            this.camera.y += (me.cy - this.camera.y) * 0.1;
+            this.camera.scale += (targetScale - this.camera.scale) * 0.05;
+        }
+
+        this.updateLeaderboard();
+    },
+
+    addFood() {
+        this.entities.foods.push({
+            x: Utils.rand(-CONFIG.mapSize/2, CONFIG.mapSize/2),
+            y: Utils.rand(-CONFIG.mapSize/2, CONFIG.mapSize/2),
+            color: Utils.randColor(),
+            r: Utils.rand(3, 6),
+            pulse: Math.random() > 0.8
+        });
+    },
+    addVirus() {
+        this.entities.viruses.push({
+            x: Utils.rand(-CONFIG.mapSize/2, CONFIG.mapSize/2),
+            y: Utils.rand(-CONFIG.mapSize/2, CONFIG.mapSize/2),
+            mass: 100,
+            r: Utils.massToRadius(100)
+        });
+    },
+    splitPlayer(pid) {
+        const p = this.entities.players.find(pl => pl.id === pid);
+        if(!p) return;
+        const adds = [];
+        p.cells.forEach(c => {
+            if(c.mass >= 35 && p.cells.length + adds.length < 16) {
+                const nm = c.mass / 2;
+                c.mass = nm; c.r = Utils.massToRadius(nm);
+                let ang;
+                if(pid === this.myId) {
+                    ang = Math.atan2(this.mouse.y, this.mouse.x);
+                } else {
+                    ang = Math.atan2(p.dir.y, p.dir.x);
+                }
+                adds.push({
+                    x: c.x, y: c.y,
+                    mass: nm, r: Utils.massToRadius(nm),
+                    vx: Math.cos(ang) * 15, vy: Math.sin(ang) * 15,
+                    merge: Date.now() + 15000
+                });
+                c.merge = Date.now() + 15000;
+            }
+        });
+        p.cells = p.cells.concat(adds);
+    },
+    split() { this.splitPlayer(this.myId); },
+    
+    eject() {
+        const p = this.entities.players.find(x => x.id === this.myId);
+        if(!p) return;
+        p.cells.forEach(c => {
+            if(c.mass > 36) {
+                c.mass -= 16; c.r = Utils.massToRadius(c.mass);
+                const ang = Math.atan2(this.mouse.y, this.mouse.x);
+                this.entities.ejected.push({
+                    x: c.x + Math.cos(ang) * c.r, y: c.y + Math.sin(ang) * c.r,
+                    vx: Math.cos(ang) * 25, vy: Math.sin(ang) * 25,
+                    mass: 12, r: Utils.massToRadius(12),
+                    color: p.color, from: p.id, time: Date.now()
+                });
+            }
+        });
+    },
+    
+    explode(p, c) {
+        const nm = c.mass / 9; c.mass = nm; c.r = Utils.massToRadius(nm);
+        for(let i=0; i<8; i++) {
+            if(p.cells.length >= 16) break;
+            const a = (Math.PI * 2 * i) / 8;
+            p.cells.push({
+                x: c.x, y: c.y, mass: nm, r: Utils.massToRadius(nm),
+                vx: Math.cos(a) * 15, vy: Math.sin(a) * 15, merge: Date.now() + 15000
+            });
+        }
+    },
+    
+    updateLeaderboard() {
+        if(Math.random() > 0.1) return;
+        const list = [...this.entities.players].sort((a,b) => b.mass - a.mass);
+        const meIdx = list.findIndex(p => p.id === this.myId);
+        if(meIdx !== -1) this.stats.rank = Math.min(this.stats.rank, meIdx + 1);
+        document.getElementById('leaderboard').innerHTML = list.slice(0,5).map((p,i) => 
+            `<div class="leaderboard-item" style="color:${p.id===this.myId?'#ffd700':'white'}">
+                <span>${i+1}. ${p.name}</span><span>${Math.floor(p.mass)}</span>
+            </div>`
+        ).join('');
+    },
+    
+    gameOver(killer) {
+        this.isRunning = false;
+        document.getElementById('gameUI').classList.replace('visible', 'hidden');
+        document.getElementById('gameOverScreen').classList.replace('hidden', 'visible');
+        document.getElementById('killerDisplay').innerText = `被 ${killer || "神秘力量"} 吞噬`;
+        document.getElementById('finalMass').innerText = Math.floor(this.stats.maxMass);
+        const s = Math.floor((Date.now() - this.stats.start) / 1000);
+        document.getElementById('survivalTime').innerText = `${Math.floor(s/60)}m ${s%60}s`;
+        document.getElementById('killCount').innerText = this.stats.kills;
+        document.getElementById('bestRank').innerText = this.stats.rank === 99 ? '-' : `#${this.stats.rank}`;
+    }
+};
+
+class Player {
+    constructor(name, isBot=false) {
+        this.id = Math.random().toString(36).substr(2,9);
+        this.name = name; this.isBot = isBot;
+        this.color = isBot ? Utils.randColor() : '#FF3366';
+        this.skin = 'classic';
+        this.cells = [{ x: Utils.rand(-1000,1000), y: Utils.rand(-1000,1000), mass: 20, r: Utils.massToRadius(20), vx: 0, vy: 0, merge: 0 }];
+        this.dir = {x:0, y:0};
+        this.cx = 0; this.cy = 0; this.mass = 20;
+        this.bounds = {w:0, h:0};
+    }
+}
+
+/**
+ * 智能 AI 类 (群聚战术 + 平滑 + 假合作)
+ */
+class Bot extends Player {
+    constructor() {
+        super(Utils.nameList[Math.floor(Math.random()*Utils.nameList.length)], true);
+        this.partnerId = null;
+        this.wanderDir = { x: 1, y: 0 };
+        this.timer = 0;
+        this.cells[0].mass += Math.random() * 50;
+        this.cells[0].r = Utils.massToRadius(this.cells[0].mass);
+        const a = Math.random() * Math.PI * 2;
+        this.dir = { x: Math.cos(a), y: Math.sin(a) };
+    }
+
+    think(world) {
+        // 0. [假合作逻辑：寻找或维持队友]
+        if (this.mass > 20000) this.partnerId = null; // 背叛
+        const partner = this.partnerId ? world.players.find(p => p.id === this.partnerId) : null;
+        if (this.partnerId && !partner) this.partnerId = null; // 队友阵亡
+
+        if (!this.partnerId && Math.random() < 0.005) {
+            const potential = world.players.find(p => p.id !== this.id && p.isBot && !p.partnerId);
+            if (potential) {
+                this.partnerId = potential.id;
+                potential.partnerId = this.id;
+            }
+        }
+
+        // 1. [加权向量计算]
+        let vX = 0, vY = 0;
+
+        // A. 食物 (Weight 0.5)
+        let closestFood = null, minFDist = Infinity;
+        for(let i=0; i<20; i++) {
+            const f = world.foods[Math.floor(Math.random() * world.foods.length)];
+            if(!f) continue;
+            const dx = f.x - this.cx, dy = f.y - this.cy;
+            const d2 = dx*dx + dy*dy;
+            if(d2 < 250000 && d2 < minFDist) {
+                minFDist = d2; closestFood = {dx, dy, dist: Math.sqrt(d2)};
+            }
+        }
+        if(closestFood) {
+            vX += (closestFood.dx / closestFood.dist) * 0.5;
+            vY += (closestFood.dy / closestFood.dist) * 0.5;
+        }
+
+        // B. 玩家交互 (敌人 / 猎物 / 队友)
+        let closestPrey = null, closestThreat = null;
+        let minPDist = Infinity, minTDist = Infinity;
+
+        world.players.forEach(p => {
+            if(p.id === this.id || p.cells.length === 0) return;
+            
+            const dx = p.cx - this.cx, dy = p.cy - this.cy;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            // --- [队友逻辑] ---
+            if (p.id === this.partnerId) {
+                // 1. 软斥力 (保持距离但减少恐惧)
+                // 只有当队友非常大且离得很近时才产生推力，且力度减半
+                if (p.mass > this.mass * 1.25 && dist < 600) {
+                    vX -= (dx / dist) * 2.5; // 正常是5.0，这里减半
+                    vY -= (dy / dist) * 2.5;
+                }
+                // 2. 行为对齐 (Flocking - Alignment)
+                // 尝试模仿队友的移动方向，形成“整体”感
+                if (p.dir) {
+                    vX += p.dir.x * 1.0;
+                    vY += p.dir.y * 1.0;
+                }
+                return; // 队友处理完毕，不再视为敌人或猎物
+            }
+
+            // --- [普通敌人/猎物] ---
+            // 天敌 (大25%)
+            if(p.mass > this.mass * 1.25 && dist < 600) {
+                if(dist < minTDist) { minTDist = dist; closestThreat = {dx, dy, dist}; }
+            }
+            // 猎物 (小25%)
+            else if(p.mass * 1.25 < this.mass && dist < 600) {
+                if(dist < minPDist) { minPDist = dist; closestPrey = {dx, dy, dist, p}; }
+            }
+        });
+
+        if(closestThreat) {
+            vX -= (closestThreat.dx / closestThreat.dist) * 5.0;
+            vY -= (closestThreat.dy / closestThreat.dist) * 5.0;
+        }
+
+        if(closestPrey) {
+            let preyWeight = 2.0;
+            // 3. [共享仇恨]
+            // 如果队友也在这附近 (距离猎物小于600)，大幅增加我对这个猎物的兴趣
+            if (partner) {
+                const distPartnerToPrey = Utils.getDist(partner.cx, partner.cy, closestPrey.p.cx, closestPrey.p.cy);
+                if (distPartnerToPrey < 600) {
+                    preyWeight = 3.5; // 协同围剿
+                }
+            }
+
+            vX += (closestPrey.dx / closestPrey.dist) * preyWeight;
+            vY += (closestPrey.dy / closestPrey.dist) * preyWeight;
+            
+            if(this.mass > closestPrey.p.mass * 2.6 && closestPrey.dist < 450 && closestPrey.dist > 150 && this.cells.length < 8) {
+                if(Math.random() < 0.02) Game.splitPlayer(this.id);
+            }
+        }
+
+        // C. 边界斥力
+        const limit = CONFIG.mapSize / 2;
+        const boundBuffer = 500;
+        if(this.cx < -limit + boundBuffer) vX += 3.0;
+        else if(this.cx > limit - boundBuffer) vX -= 3.0;
+        if(this.cy < -limit + boundBuffer) vY += 3.0;
+        else if(this.cy > limit - boundBuffer) vY -= 3.0;
+
+        // 2. [最终决策 & 惯性平滑]
+        if(Math.abs(vX) < 0.1 && Math.abs(vY) < 0.1) {
+            if(Date.now() > this.timer) {
+                const a = Math.random() * Math.PI * 2;
+                this.wanderDir = {x: Math.cos(a), y: Math.sin(a)};
+                this.timer = Date.now() + Math.random()*2000 + 1000;
+            }
+            vX = this.wanderDir.x;
+            vY = this.wanderDir.y;
+        }
+
+        const finalDist = Math.sqrt(vX*vX + vY*vY);
+        let targetDir = { x: 0, y: 0 };
+        if(finalDist > 0) {
+            targetDir = { x: vX / finalDist, y: vY / finalDist };
+        } else {
+            targetDir = this.dir;
+        }
+
+        const smoothFactor = 0.1; 
+        this.dir.x += (targetDir.x - this.dir.x) * smoothFactor;
+        this.dir.y += (targetDir.y - this.dir.y) * smoothFactor;
+
+        const currentLen = Math.sqrt(this.dir.x*this.dir.x + this.dir.y*this.dir.y);
+        if(currentLen > 0) {
+            this.dir.x /= currentLen;
+            this.dir.y /= currentLen;
+        }
+    }
+}
+
+function changeSkin(isGameOver = false) {
+    let newSkin;
+    do {
+        newSkin = SkinSystem.types[Math.floor(Math.random() * SkinSystem.types.length)];
+    } while (newSkin === currentSkin);
+    
+    currentSkin = newSkin;
+    const canvas = document.getElementById('skinPreview');
+    const ctx = canvas.getContext('2d');
+    const nameDisplay = document.getElementById('skinNameDisplay');
+    ctx.clearRect(0, 0, 100, 100); ctx.translate(50, 50);
+    SkinSystem.render(currentSkin, ctx, 48, '#FF3366', Date.now()); ctx.translate(-50, -50);
+    canvas.style.transform = "scale(0.8) rotate(360deg)"; setTimeout(() => canvas.style.transform = "scale(1) rotate(0deg)", 200);
+    nameDisplay.innerText = "当前皮肤: " + SkinSystem.names[currentSkin];
+    if (isGameOver) {
+        document.getElementById('gameOverScreen').classList.replace('visible', 'hidden');
+        document.getElementById('startScreen').classList.replace('hidden', 'visible');
+    }
+}
+
+function animatePreview() {
+    if (!Game.isRunning) {
+        const canvas = document.getElementById('skinPreview');
+        const ctx = canvas.getContext('2d');
+        if(ctx) {
+            ctx.clearRect(0, 0, 100, 100); ctx.translate(50, 50);
+            SkinSystem.render(currentSkin, ctx, 48, '#FF3366', Date.now()); ctx.translate(-50, -50);
+        }
+    }
+    requestAnimationFrame(animatePreview);
+}
+
+function startGame() { const name = document.getElementById('nickname').value || "Guest"; Game.init(); Game.start(name); }
+function restartGame() { const name = document.getElementById('nickname').value || "Guest"; Game.start(name); }
+animatePreview();
+document.oncontextmenu = function(){return false;}
+</script>
+</body>
+</html>
